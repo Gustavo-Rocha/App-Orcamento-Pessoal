@@ -8,6 +8,13 @@ import { formatCurrency } from '@/lib/utils/format'
 import Big from 'big.js'
 
 
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: 'Dashboard | Antigravity Fin',
+  description: 'Visão geral das receitas, despesas e distribuição de orçamento mensal',
+}
+
 export default async function DashboardPage() {
   const supabase = await createClient()
 
@@ -19,28 +26,37 @@ export default async function DashboardPage() {
   const now = new Date()
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
   const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
+  const startOfSixMonths = new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString().split('T')[0]
 
-  // Current month stats
-  const { data: currentMonthTransactions } = await supabase
-    .from('transactions')
-    .select('amount, type, date, description, categories(name, color)')
-    .eq('user_id', user.id)
-    .gte('date', startOfMonth)
-    .lte('date', endOfMonth)
-
-  // Last 5 transactions
-  const { data: recentTransactions } = await supabase
-    .from('transactions')
-    .select('id, amount, type, date, description, categories(name, color)')
-    .eq('user_id', user.id)
-    .order('date', { ascending: false })
-    .limit(5)
+  // Fetch data in parallel to avoid async waterfalls
+  const [
+    { data: currentMonthTransactions },
+    { data: recentTransactions },
+    { data: historyTransactions }
+  ] = await Promise.all([
+    supabase
+      .from('transactions')
+      .select('amount, type, date, description, categories(name, color)')
+      .eq('user_id', user.id)
+      .gte('date', startOfMonth)
+      .lte('date', endOfMonth),
+    supabase
+      .from('transactions')
+      .select('id, amount, type, date, description, categories(name, color)')
+      .eq('user_id', user.id)
+      .order('date', { ascending: false })
+      .limit(5),
+    supabase
+      .from('transactions')
+      .select('amount, type, date')
+      .eq('user_id', user.id)
+      .gte('date', startOfSixMonths)
+  ])
 
   const formattedRecentTransactions = (recentTransactions || []).map(tx => ({
     ...tx,
     categories: Array.isArray(tx.categories) ? tx.categories[0] : tx.categories
   }))
-
 
   const monthTransactions = (currentMonthTransactions || []).map(tx => ({
     ...tx,
@@ -50,14 +66,6 @@ export default async function DashboardPage() {
   const { income, expense, balance } = calculateSummary(monthTransactions)
   const categoryData = aggregateByCategory(monthTransactions)
 
-
-  // Last 6 months evolution
-  const startOfSixMonths = new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString().split('T')[0]
-  const { data: historyTransactions } = await supabase
-    .from('transactions')
-    .select('amount, type, date')
-    .eq('user_id', user.id)
-    .gte('date', startOfSixMonths)
 
   const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
   const evolutionMap: { [key: string]: { month: string; income: Big; expense: Big; sortKey: number } } = {}
