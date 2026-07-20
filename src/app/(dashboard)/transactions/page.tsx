@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import TransactionModal from '@/components/TransactionModal'
 import { Plus, Edit2, Trash2, Calendar, Search, Filter } from 'lucide-react'
+import { formatCurrency } from '@/lib/utils/format'
+
 
 interface Category {
   id: string
@@ -84,19 +86,39 @@ export default function TransactionsPage() {
   }, [fetchData])
 
   const handleDelete = async (id: string) => {
-    if (confirm('Tem certeza que deseja excluir esta transação?')) {
-      const { error } = await supabase
-        .from('transactions')
-        .delete()
-        .eq('id', id)
-      
-      if (!error) {
-        fetchData()
-      } else {
-        alert('Erro ao excluir: ' + error.message)
-      }
+    // Passo 1 de 3 da Confirmação
+    const step1 = confirm(
+      "ATENÇÃO: Você está prestes a excluir permanentemente esta transação financeira do sistema. Esta ação não poderá ser desfeita.\n\n" +
+      "Confirmar Passo 1 de 3: Deseja prosseguir?"
+    )
+    if (!step1) return
+
+    // Passo 2 de 3 da Confirmação
+    const step2 = confirm(
+      "AVISO: A exclusão desta transação afetará diretamente o seu saldo mensal calculado e as estatísticas dos gráficos.\n\n" +
+      "Confirmar Passo 2 de 3: Você tem certeza absoluta?"
+    )
+    if (!step2) return
+
+    // Passo 3 de 3 da Confirmação
+    const step3 = confirm(
+      "CONFIRMAÇÃO FINAL: Deseja apagar fisicamente esta transação agora?\n\n" +
+      "Confirmar Passo 3 de 3: Excluir permanentemente?"
+    )
+    if (!step3) return
+
+    const { error } = await supabase
+      .from('transactions')
+      .delete()
+      .eq('id', id)
+    
+    if (!error) {
+      fetchData()
+    } else {
+      alert('Erro ao excluir: ' + error.message)
     }
   }
+
 
   const handleEdit = (tx: Transaction) => {
     setEditingTransaction(tx)
@@ -220,7 +242,7 @@ export default function TransactionsPage() {
                         color: tx.type === 'income' ? 'var(--color-success)' : 'var(--color-danger)' 
                       }}
                     >
-                      {tx.type === 'income' ? '+' : '-'} R$ {Number(tx.amount).toFixed(2)}
+                      {tx.type === 'income' ? '+' : '-'} {formatCurrency(tx.amount)}
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: '8px' }}>

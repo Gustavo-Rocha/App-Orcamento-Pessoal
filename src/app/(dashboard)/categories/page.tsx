@@ -30,7 +30,7 @@ export default function CategoriesPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('categories')
       .select('id, name, color, icon, type')
       .eq('user_id', user.id)
@@ -89,19 +89,39 @@ export default function CategoriesPage() {
   }
 
   const handleDeleteCategory = async (id: string) => {
-    if (confirm('Tem certeza que deseja excluir esta categoria? As transações associadas perderão o vínculo.')) {
-      const { error } = await supabase
-        .from('categories')
-        .delete()
-        .eq('id', id)
+    // Passo 1 de 3 da Confirmação
+    const step1 = confirm(
+      "ATENÇÃO: Você está prestes a excluir permanentemente esta categoria do sistema. Esta ação não poderá ser desfeita.\n\n" +
+      "Confirmar Passo 1 de 3: Deseja prosseguir?"
+    )
+    if (!step1) return
 
-      if (!error) {
-        fetchCategories()
-      } else {
-        alert('Erro ao excluir: ' + error.message)
-      }
+    // Passo 2 de 3 da Confirmação
+    const step2 = confirm(
+      "AVISO DE IMPACTO: Todas as transações atualmente associadas a esta categoria perderão o vínculo e ficarão marcadas como 'Sem Categoria'.\n\n" +
+      "Confirmar Passo 2 de 3: Você tem certeza de que deseja desfazer esses vínculos?"
+    )
+    if (!step2) return
+
+    // Passo 3 de 3 da Confirmação
+    const step3 = confirm(
+      "CONFIRMAÇÃO FINAL: Deseja apagar fisicamente esta categoria agora?\n\n" +
+      "Confirmar Passo 3 de 3: Excluir permanentemente?"
+    )
+    if (!step3) return
+
+    const { error } = await supabase
+      .from('categories')
+      .delete()
+      .eq('id', id)
+
+    if (!error) {
+      fetchCategories()
+    } else {
+      alert('Erro ao excluir: ' + error.message)
     }
   }
+
 
   const predefinedIcons = [
     { name: 'PiggyBank', label: 'Porquinho' },

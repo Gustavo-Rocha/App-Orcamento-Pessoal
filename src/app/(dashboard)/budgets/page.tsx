@@ -4,6 +4,9 @@ import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { calculateProgressColor } from '@/lib/utils/budgetCalculator'
 import { Plus, PiggyBank, Save } from 'lucide-react'
+import Big from 'big.js'
+import { formatCurrency } from '@/lib/utils/format'
+
 
 interface Category {
   id: string
@@ -66,10 +69,11 @@ export default function BudgetsPage() {
       .gte('date', startOfMonth)
       .lte('date', endOfMonth)
 
-    const expenseMap: { [key: string]: number } = {}
+    const expenseMap: { [key: string]: Big } = {}
     transactions?.forEach((tx) => {
       if (tx.category_id) {
-        expenseMap[tx.category_id] = (expenseMap[tx.category_id] || 0) + Number(tx.amount)
+        const amt = new Big(tx.amount || 0)
+        expenseMap[tx.category_id] = (expenseMap[tx.category_id] || new Big(0)).plus(amt)
       }
     })
 
@@ -91,7 +95,7 @@ export default function BudgetsPage() {
     // 4. Combine data
     const combined: CategoryWithBudget[] = categories.map((cat) => {
       const limit = budgetMap[cat.id] || 0
-      const expenseSum = expenseMap[cat.id] || 0
+      const expenseSum = expenseMap[cat.id] ? expenseMap[cat.id].toNumber() : 0
       return {
         id: cat.id,
         name: cat.name,
@@ -122,13 +126,22 @@ export default function BudgetsPage() {
     setSaveStatus((prev) => ({ ...prev, [categoryId]: 'idle' }))
 
     const rawLimit = editLimits[categoryId]
-    const numLimit = parseFloat(rawLimit)
-
-    if (isNaN(numLimit) || numLimit < 0) {
+    let bigLimit: Big
+    try {
+      bigLimit = new Big(rawLimit || 0)
+    } catch {
       setSaveStatus((prev) => ({ ...prev, [categoryId]: 'error' }))
       setSaveLoading((prev) => ({ ...prev, [categoryId]: false }))
       return
     }
+
+    if (bigLimit.lt(0)) {
+      setSaveStatus((prev) => ({ ...prev, [categoryId]: 'error' }))
+      setSaveLoading((prev) => ({ ...prev, [categoryId]: false }))
+      return
+    }
+
+    const numLimit = bigLimit.toNumber()
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
@@ -212,8 +225,8 @@ export default function BudgetsPage() {
                   <div>
                     <h3 style={{ fontSize: '18px', fontWeight: '600' }}>{cat.name}</h3>
                     <div style={{ fontSize: '14px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                      Gasto: <span style={{ color: 'white', fontWeight: '500' }}>R$ {expense.toFixed(2)}</span>
-                      {limit > 0 && ` de R$ ${limit.toFixed(2)}`}
+                       Gasto: <span style={{ color: 'white', fontWeight: '500' }}>{formatCurrency(expense)}</span>
+                       {limit > 0 && ` de ${formatCurrency(limit)}`}
                     </div>
                   </div>
 

@@ -14,6 +14,8 @@ import {
   CartesianGrid, 
   Legend 
 } from 'recharts'
+import { formatCurrency } from '@/lib/utils/format'
+
 
 interface DashboardChartsProps {
   categoryData: { name: string; value: number; color: string }[]
@@ -68,7 +70,7 @@ export default function DashboardCharts({ categoryData, evolutionData }: Dashboa
                     borderRadius: '8px',
                     color: 'var(--text-primary)'
                   }} 
-                  formatter={(value) => `R$ ${Number(value).toFixed(2)}`}
+                  formatter={(value) => formatCurrency(Number(value))}
                 />
                 <Legend 
                   verticalAlign="bottom" 
@@ -100,7 +102,7 @@ export default function DashboardCharts({ categoryData, evolutionData }: Dashboa
                   borderRadius: '8px',
                   color: 'var(--text-primary)'
                 }} 
-                formatter={(value) => `R$ ${Number(value).toFixed(2)}`}
+                formatter={(value) => formatCurrency(Number(value))}
               />
               <Legend 
                 verticalAlign="bottom" 

@@ -1,9 +1,12 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { calculateSummary, aggregateByCategory } from '@/lib/utils/budgetCalculator'
+import { calculateSummary, aggregateByCategory, type Transaction } from '@/lib/utils/budgetCalculator'
 import DashboardCharts from '@/components/DashboardCharts'
 import { ArrowUpRight, ArrowDownRight, Wallet, Calendar } from 'lucide-react'
 import Link from 'next/link'
+import { formatCurrency } from '@/lib/utils/format'
+import Big from 'big.js'
+
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -33,9 +36,20 @@ export default async function DashboardPage() {
     .order('date', { ascending: false })
     .limit(5)
 
-  const monthTransactions = currentMonthTransactions || []
+  const formattedRecentTransactions = (recentTransactions || []).map(tx => ({
+    ...tx,
+    categories: Array.isArray(tx.categories) ? tx.categories[0] : tx.categories
+  }))
+
+
+  const monthTransactions = (currentMonthTransactions || []).map(tx => ({
+    ...tx,
+    categories: Array.isArray(tx.categories) ? tx.categories[0] : tx.categories
+  })) as unknown as Transaction[]
+
   const { income, expense, balance } = calculateSummary(monthTransactions)
   const categoryData = aggregateByCategory(monthTransactions)
+
 
   // Last 6 months evolution
   const startOfSixMonths = new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString().split('T')[0]
@@ -46,12 +60,12 @@ export default async function DashboardPage() {
     .gte('date', startOfSixMonths)
 
   const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
-  const evolutionMap: { [key: string]: { month: string; income: number; expense: number; sortKey: number } } = {}
+  const evolutionMap: { [key: string]: { month: string; income: Big; expense: Big; sortKey: number } } = {}
 
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
     const label = `${monthNames[d.getMonth()]}/${d.getFullYear().toString().substring(2)}`
-    evolutionMap[label] = { month: label, income: 0, expense: 0, sortKey: d.getTime() }
+    evolutionMap[label] = { month: label, income: new Big(0), expense: new Big(0), sortKey: d.getTime() }
   }
 
   if (historyTransactions) {
@@ -59,16 +73,22 @@ export default async function DashboardPage() {
       const d = new Date(t.date + 'T00:00:00')
       const label = `${monthNames[d.getMonth()]}/${d.getFullYear().toString().substring(2)}`
       if (evolutionMap[label]) {
+        const amt = new Big(t.amount || 0)
         if (t.type === 'income') {
-          evolutionMap[label].income += Number(t.amount)
+          evolutionMap[label].income = evolutionMap[label].income.plus(amt)
         } else if (t.type === 'expense') {
-          evolutionMap[label].expense += Number(t.amount)
+          evolutionMap[label].expense = evolutionMap[label].expense.plus(amt)
         }
       }
     })
   }
 
-  const evolutionData = Object.values(evolutionMap).sort((a, b) => a.sortKey - b.sortKey)
+  const evolutionData = Object.values(evolutionMap).map(item => ({
+    ...item,
+    income: item.income.toNumber(),
+    expense: item.expense.toNumber()
+  })).sort((a, b) => a.sortKey - b.sortKey)
+
 
   return (
     <>
@@ -88,7 +108,7 @@ export default async function DashboardPage() {
             </div>
           </div>
           <span style={{ fontSize: '28px', fontWeight: '700', color: balance >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-            R$ {balance.toFixed(2)}
+            {formatCurrency(balance)}
           </span>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Mês vigente</span>
         </div>
@@ -102,7 +122,7 @@ export default async function DashboardPage() {
             </div>
           </div>
           <span style={{ fontSize: '28px', fontWeight: '700', color: 'var(--color-success)' }}>
-            R$ {income.toFixed(2)}
+            {formatCurrency(income)}
           </span>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Total recebido este mês</span>
         </div>
@@ -116,7 +136,7 @@ export default async function DashboardPage() {
             </div>
           </div>
           <span style={{ fontSize: '28px', fontWeight: '700', color: 'var(--color-danger)' }}>
-            R$ {expense.toFixed(2)}
+            {formatCurrency(expense)}
           </span>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Total gasto este mês</span>
         </div>
@@ -134,13 +154,13 @@ export default async function DashboardPage() {
           </Link>
         </div>
 
-        {(!recentTransactions || recentTransactions.length === 0) ? (
+        {(!formattedRecentTransactions || formattedRecentTransactions.length === 0) ? (
           <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)', fontSize: '14px' }}>
             Nenhuma transação cadastrada até o momento.
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {recentTransactions.map((tx) => (
+            {formattedRecentTransactions.map((tx) => (
               <div 
                 key={tx.id} 
                 style={{ 
@@ -178,7 +198,7 @@ export default async function DashboardPage() {
                     color: tx.type === 'income' ? 'var(--color-success)' : 'var(--color-danger)' 
                   }}
                 >
-                  {tx.type === 'income' ? '+' : '-'} R$ {Number(tx.amount).toFixed(2)}
+                  {tx.type === 'income' ? '+' : '-'} {formatCurrency(tx.amount)}
                 </span>
               </div>
             ))}

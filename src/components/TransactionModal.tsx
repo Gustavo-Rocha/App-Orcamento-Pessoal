@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Big from 'big.js'
+
 import { createClient } from '@/lib/supabase/client'
 import { X } from 'lucide-react'
 
@@ -78,12 +80,22 @@ export default function TransactionModal({
     setError(null)
     setLoading(true)
 
-    const numAmount = parseFloat(amount)
-    if (isNaN(numAmount) || numAmount <= 0) {
+    let bigAmount: Big
+    try {
+      bigAmount = new Big(amount)
+    } catch {
+      setError('O valor informado é inválido.')
+      setLoading(false)
+      return
+    }
+
+    if (bigAmount.lte(0)) {
       setError('O valor precisa ser maior que zero.')
       setLoading(false)
       return
     }
+
+    const numAmount = bigAmount.toNumber()
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
